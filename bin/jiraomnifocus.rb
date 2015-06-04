@@ -120,7 +120,7 @@ end
 def get_tasks(omnifocus_document)
   if $tasks.nil?
     
-    tasks = omnifocus_document.flattened_tasks.get.find_all { |t| /\[[A-Z]*-[0-9]*\].*/.match(t.name.get) }
+    tasks = omnifocus_document.flattened_tasks.get.find_all { |t| /.*\[[A-Z]*-[0-9]*\]/.match(t.name.get) }
     $tasks = tasks    
   else
     tasks = $tasks
@@ -141,8 +141,8 @@ def add_task(omnifocus_document, new_task_properties)
 
   # Check to see if there's already an OF Task with that name in the referenced Project
   # If there is, just stop.
-  name = /\[([A-Z]*-[0-9]*)\].*/.match(new_task_properties["name"])[1]
-  exists = tasks.find { |t| t.name.get.force_encoding("UTF-8").split("]")[0].split("[")[1] == name }
+  name = /.*\[([A-Z]*-[0-9]*)\]/.match(new_task_properties["name"])[1]
+  exists = tasks.find { |t| t.name.get.force_encoding("UTF-8").match(/.*\[([A-Z]*-[0-9]*)\]/)[1] == name }
   return false if exists
 
   # If there is a passed in OF context name, get the actual context object
@@ -188,7 +188,7 @@ def add_jira_tickets_to_omnifocus ()
   # Iterate through resulting issues.
   results.each do |jira_id, ticket|
     # Create the task name by adding the ticket summary to the jira ticket key
-    task_name = "[#{jira_id}] #{ticket["fields"]["summary"]}"
+    task_name = "#{ticket["fields"]["summary"]} [#{jira_id}]"
     # Create the task notes with the Jira Ticket URL
     task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\nStatus:#{ticket["fields"]["status"]["name"]}\n\n#{ticket["fields"]["description"]}"
     
@@ -237,7 +237,7 @@ def mark_resolved_jira_tickets_as_complete_in_omnifocus ()
               task_due = "Due: #{data["fields"]["duedate"]}\n"
             end
             # Create the task name by adding the ticket summary to the jira ticket key
-            task_name = "[#{jira_id}] #{data["fields"]["summary"]}"
+            task_name = "#{data["fields"]["summary"]} [#{jira_id}]"
             # Create the task notes with the Jira Ticket URL
             task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\n#{task_due}Status:#{data["fields"]["status"]["name"]}\n\n#{data["fields"]["description"]}"
 
