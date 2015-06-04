@@ -90,6 +90,8 @@ DEFAULT_CONTEXT = opts[:context]
 DEFAULT_PROJECT = opts[:project]
 FLAGGED = opts[:flag]
 
+$tasks = nil
+
 # This method gets all issues that are assigned to your USERNAME and whos status isn't Closed or Resolved.  It returns a Hash where the key is the Jira Ticket Key and the value is the Jira Ticket Summary.
 def get_issues
   jira_issues = Hash.new
@@ -115,6 +117,16 @@ def get_issues
   return jira_issues
 end
 
+def get_tasks(omnifocus_document)
+  if $tasks.nil?
+    tasks = omnifocus_document.flattened_tasks.get.find_all { |t| t.name.get.match("\[[A-Z]*-[0-9]*\].*") }
+    $tasks = tasks    
+  else
+    tasks = $tasks
+  end
+  return tasks
+end
+
 # This method adds a new Task to OmniFocus based on the new_task_properties passed in
 def add_task(omnifocus_document, new_task_properties)
   # If there is a passed in OF project name, get the actual project object
@@ -123,10 +135,13 @@ def add_task(omnifocus_document, new_task_properties)
     proj = omnifocus_document.flattened_tasks[proj_name]
   end
 
+  #context = omnifocus_document.flattened_contexts[DEFAULT_CONTEXT]
+  tasks = get_tasks(omnifocus_document)
+
   # Check to see if there's already an OF Task with that name in the referenced Project
   # If there is, just stop.
-  name   = new_task_properties["name"]
-  exists = proj.tasks.get.find { |t| t.name.get.force_encoding("UTF-8") == name }
+  name = new_task_properties["name"].split("]")[0].split("[")[1]
+  exists = tasks.find { |t| t.name.get.force_encoding("UTF-8").split("]")[0].split("[")[1] == name }
   return false if exists
 
   # If there is a passed in OF context name, get the actual context object
@@ -147,10 +162,10 @@ def add_task(omnifocus_document, new_task_properties)
   tprops[:context] = ctx if new_task_properties['context']
 
   # You can uncomment this line and comment the one below if you want the tasks to end up in your Inbox instead of a specific Project
-#  new_task = omnifocus_document.make(:new => :inbox_task, :with_properties => tprops)
+  new_task = omnifocus_document.make(:new => :inbox_task, :with_properties => tprops)
 
   # Make a new Task in the Project
-  proj.make(:new => :task, :with_properties => tprops)
+  # proj.make(:new => :task, :with_properties => tprops)
 
   puts "task created"
   return true
@@ -172,9 +187,9 @@ def add_jira_tickets_to_omnifocus ()
   # Iterate through resulting issues.
   results.each do |jira_id, ticket|
     # Create the task name by adding the ticket summary to the jira ticket key
-    task_name = "#{jira_id}: #{ticket["fields"]["summary"]}"
+    task_name = "[#{jira_id}] #{ticket["fields"]["summary"]}"
     # Create the task notes with the Jira Ticket URL
-    task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}"
+    task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\nDue: #{ticket["fields"]["duedate"]}\nStatus:#{ticket["fields"]["status"]["name"]}\n\n#{ticket["fields"]["description"]}"
     
     # Build properties for the Task
     @props = {}
@@ -183,9 +198,9 @@ def add_jira_tickets_to_omnifocus ()
     @props['context'] = DEFAULT_CONTEXT
     @props['note'] = task_notes
     @props['flagged'] = FLAGGED
-    unless ticket["fields"]["duedate"].nil?
-      @props["due_date"] = Date.parse(ticket["fields"]["duedate"])
-    end
+    # unless ticket["fields"]["duedate"].nil?
+    #   @props["due_date"] = Date.parse(ticket["fields"]["duedate"])
+    # end
     add_task(omnifocus_document, @props)
   end
 end
@@ -195,10 +210,14 @@ def mark_resolved_jira_tickets_as_complete_in_omnifocus ()
   omnifocus_app = Appscript.app.by_name("OmniFocus")
   omnifocus_document = omnifocus_app.default_document
   ctx = omnifocus_document.flattened_contexts[DEFAULT_CONTEXT]
-  ctx.tasks.get.find.each do |task|
+
+  tasks = get_tasks(omnifocus_document)
+
+  #ctx = omnifocus_document.flattened_tasks[DEFAULT_PROJECT]
+  tasks.each do |task|
     if !task.completed.get && task.note.get.match(JIRA_BASE_URL)
       # try to parse out jira id
-      full_url= task.note.get
+      full_url= task.note.get.split("\n\n")[0]
       jira_id=full_url.sub(JIRA_BASE_URL+"/browse/","")
       # check status of the jira
       uri = URI(JIRA_BASE_URL + '/rest/api/2/issue/' + jira_id)
@@ -211,12 +230,18 @@ def mark_resolved_jira_tickets_as_complete_in_omnifocus ()
   if response.code =~ /20[0-9]{1}/
             data = JSON.parse(response.body)
             # Check to see if the Jira ticket has been resolved, if so mark it as complete.
-            resolution = data["fields"]["resolution"]
-            if resolution != nil
+            # resolution = data["fields"]["resolution"]
+            status = data["fields"]["status"]["name"]
+            if status == "Geschlossen" || status == "Erledigt"
               # if resolved, mark it as complete in OmniFocus
               if task.completed.get != true
                 task.completed.set(true)
                 puts "task marked completed"
+              end
+            else
+              if task.completed.get != false
+                task.completed.set(false)
+                puts "task marked not completed"
               end
             end
             # Check to see if the Jira ticket has been unassigned or assigned to someone else, if so delete it.
