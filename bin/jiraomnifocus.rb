@@ -119,7 +119,7 @@ end
 
 def get_tasks(omnifocus_document)
   if $tasks.nil?
-    tasks = omnifocus_document.flattened_tasks.get.find_all { |t| t.name.get.match("\[[A-Z]*-[0-9]*\].*") }
+    tasks = omnifocus_document.flattened_tasks.get.find_all { |t| /\[[A-Z]*-[0-9]*\].*/.match(t.name.get) }
     $tasks = tasks    
   else
     tasks = $tasks
@@ -140,7 +140,7 @@ def add_task(omnifocus_document, new_task_properties)
 
   # Check to see if there's already an OF Task with that name in the referenced Project
   # If there is, just stop.
-  name = new_task_properties["name"].split("]")[0].split("[")[1]
+  name = /\[([A-Z]*-[0-9]*)\].*/.match(new_task_properties["name"])[1]
   exists = tasks.find { |t| t.name.get.force_encoding("UTF-8").split("]")[0].split("[")[1] == name }
   return false if exists
 
@@ -209,7 +209,7 @@ def mark_resolved_jira_tickets_as_complete_in_omnifocus ()
   # get tasks from the project
   omnifocus_app = Appscript.app.by_name("OmniFocus")
   omnifocus_document = omnifocus_app.default_document
-  ctx = omnifocus_document.flattened_contexts[DEFAULT_CONTEXT]
+  #ctx = omnifocus_document.flattened_contexts[DEFAULT_CONTEXT]
 
   tasks = get_tasks(omnifocus_document)
 
