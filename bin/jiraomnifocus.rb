@@ -119,6 +119,7 @@ end
 
 def get_tasks(omnifocus_document)
   if $tasks.nil?
+    
     tasks = omnifocus_document.flattened_tasks.get.find_all { |t| /\[[A-Z]*-[0-9]*\].*/.match(t.name.get) }
     $tasks = tasks    
   else
@@ -189,7 +190,7 @@ def add_jira_tickets_to_omnifocus ()
     # Create the task name by adding the ticket summary to the jira ticket key
     task_name = "[#{jira_id}] #{ticket["fields"]["summary"]}"
     # Create the task notes with the Jira Ticket URL
-    task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\nDue: #{ticket["fields"]["duedate"]}\nStatus:#{ticket["fields"]["status"]["name"]}\n\n#{ticket["fields"]["description"]}"
+    task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\nStatus:#{ticket["fields"]["status"]["name"]}\n\n#{ticket["fields"]["description"]}"
     
     # Build properties for the Task
     @props = {}
@@ -198,9 +199,9 @@ def add_jira_tickets_to_omnifocus ()
     @props['context'] = DEFAULT_CONTEXT
     @props['note'] = task_notes
     @props['flagged'] = FLAGGED
-    # unless ticket["fields"]["duedate"].nil?
-    #   @props["due_date"] = Date.parse(ticket["fields"]["duedate"])
-    # end
+    unless ticket["fields"]["duedate"].nil?
+      @props["due_date"] = Date.parse(ticket["fields"]["duedate"])
+    end
     add_task(omnifocus_document, @props)
   end
 end
@@ -227,8 +228,23 @@ def mark_resolved_jira_tickets_as_complete_in_omnifocus ()
         request.basic_auth USERNAME, PASSWORD
         response = http.request request
 
-  if response.code =~ /20[0-9]{1}/
+        if response.code =~ /20[0-9]{1}/
             data = JSON.parse(response.body)
+
+            # Update data
+            unless data["fields"]["duedate"].nil?
+              #task.due_date.set(Date.parse(data["fields"]["duedate"]))
+              task_due = "Due: #{data["fields"]["duedate"]}\n"
+            end
+            # Create the task name by adding the ticket summary to the jira ticket key
+            task_name = "[#{jira_id}] #{data["fields"]["summary"]}"
+            # Create the task notes with the Jira Ticket URL
+            task_notes = "#{JIRA_BASE_URL}/browse/#{jira_id}\n\n#{task_due}Status:#{data["fields"]["status"]["name"]}\n\n#{data["fields"]["description"]}"
+
+            task.name.set(task_name)
+            task.note.set(task_notes)
+
+
             # Check to see if the Jira ticket has been resolved, if so mark it as complete.
             # resolution = data["fields"]["resolution"]
             status = data["fields"]["status"]["name"]
