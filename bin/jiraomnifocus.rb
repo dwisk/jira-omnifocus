@@ -143,7 +143,10 @@ def add_task(omnifocus_document, new_task_properties)
   # If there is, just stop.
   name = /.*\[([A-Z]*-[0-9]*)\]/.match(new_task_properties["name"])[1]
   exists = tasks.find { |t| t.name.get.force_encoding("UTF-8").match(/.*\[([A-Z]*-[0-9]*)\]/)[1] == name }
-  return false if exists
+  if exists
+    exists.completed.set(false) unless exists.completed.get
+    return false
+  end
 
   # If there is a passed in OF context name, get the actual context object
   if new_task_properties['context']
